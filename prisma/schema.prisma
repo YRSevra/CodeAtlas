@@ -1,0 +1,205 @@
+// Prisma Schema for CodeAtlas
+// Normalized PostgreSQL architecture for repository intelligence, health scoring,
+// deterministic recommendations, multi-repo comparisons, and exportable reports.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Optional workspace profile for future authenticated multi-user workspaces.
+/// No fake password hashes or insecure credentials are stored here.
+model User {
+  id           String   @id @default(cuid())
+  githubHandle String?  @unique @map("github_handle")
+  displayName  String?  @map("display_name")
+  email        String?  @unique
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  analyses    RepositoryAnalysis[]
+  comparisons RepositoryComparison[]
+  reports     Report[]
+
+  @@map("users")
+}
+
+/// Canonical GitHub repository entity identified by owner/name.
+model Repository {
+  id              String    @id @default(cuid())
+  owner           String
+  name            String
+  fullName        String    @unique @map("full_name")
+  url             String
+  description     String?
+  homepage        String?
+  defaultBranch   String    @map("default_branch")
+  primaryLanguage String?   @map("primary_language")
+  licenseKey      String?   @map("license_key")
+  licenseName     String?   @map("license_name")
+  isPrivate       Boolean   @default(false) @map("is_private")
+  isArchived      Boolean   @default(false) @map("is_archived")
+  isFork          Boolean   @default(false) @map("is_fork")
+  githubCreatedAt DateTime? @map("github_created_at")
+  githubUpdatedAt DateTime? @map("github_updated_at")
+  githubPushedAt  DateTime? @map("github_pushed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  analyses        RepositoryAnalysis[]
+  comparisonItems RepositoryComparisonItem[]
+  reports         Report[]
+
+  @@unique([owner, name])
+  @@index([primaryLanguage])
+  @@index([updatedAt(sort: Desc)])
+  @@map("repositories")
+}
+
+/// Point-in-time snapshot of a repository's observable GitHub engineering metrics.
+/// Nullable metric columns distinguish unavailable/rate-limited data from true zero values.
+model RepositoryAnalysis {
+  id                      String    @id @default(cuid())
+  repositoryId            String    @map("repository_id")
+  userId                  String?   @map("user_id")
+  analyzedAt              DateTime  @default(now()) @map("analyzed_at")
+  starsCount              Int       @map("stars_count")
+  forksCount              Int       @map("forks_count")
+  openIssuesCount         Int       @map("open_issues_count")
+  watchersCount           Int       @map("watchers_count")
+  openPullRequestsCount   Int?      @map("open_pull_requests_count")
+  mergedPullRequestsCount Int?      @map("merged_pull_requests_count")
+  contributorsCount       Int?      @map("contributors_count")
+  recentCommitsCount      Int?      @map("recent_commits_count")
+  releasesCount           Int?      @map("releases_count")
+  latestReleaseTag        String?   @map("latest_release_tag")
+  latestReleaseAt         DateTime? @map("latest_release_at")
+  hasReadme               Boolean   @map("has_readme")
+  readmeLength            Int?      @map("readme_length")
+  hasContributing         Boolean   @map("has_contributing")
+  hasCodeOfConduct        Boolean   @map("has_code_of_conduct")
+  hasTests                Boolean   @map("has_tests")
+  hasCiCd                 Boolean   @map("has_ci_cd")
+  hasPackageManifest      Boolean   @map("has_package_manifest")
+  languagesJson           Json      @map("languages_json")
+  commitActivityJson      Json?     @map("commit_activity_json")
+  contributorsJson        Json?     @map("contributors_json")
+  recentCommitsJson       Json?     @map("recent_commits_json")
+  releasesJson            Json?     @map("releases_json")
+  dataQualityNotesJson    Json      @map("data_quality_notes_json")
+  methodologyVersion      String    @default("1.0.0") @map("methodology_version")
+
+  repository      Repository                 @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user            User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  healthScore     HealthScore?
+  recommendations Recommendation[]
+  comparisonItems RepositoryComparisonItem[]
+  reports         Report[]
+
+  @@index([repositoryId, analyzedAt(sort: Desc)])
+  @@index([analyzedAt(sort: Desc)])
+  @@map("repository_analyses")
+}
+
+/// Explainable 0-100 engineering health score tied 1:1 to a RepositoryAnalysis snapshot.
+model HealthScore {
+  id                 String   @id @default(cuid())
+  analysisId         String   @unique @map("analysis_id")
+  overallScore       Int      @map("overall_score")
+  grade              String
+  documentationScore Int      @map("documentation_score")
+  licenseScore       Int      @map("license_score")
+  testingScore       Int      @map("testing_score")
+  cicdScore          Int      @map("cicd_score")
+  maintenanceScore   Int      @map("maintenance_score")
+  organizationScore  Int      @map("organization_score")
+  contributionScore  Int      @map("contribution_score")
+  releaseScore       Int      @map("release_score")
+  breakdownJson      Json     @map("breakdown_json")
+  disclaimer         String
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  analysis RepositoryAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([overallScore])
+  @@map("health_scores")
+}
+
+/// Deterministic engineering recommendation emitted by rule evaluation.
+model Recommendation {
+  id            String   @id @default(cuid())
+  analysisId    String   @map("analysis_id")
+  ruleId        String   @map("rule_id")
+  category      String
+  severity      String
+  title         String
+  whatIsMissing String   @map("what_is_missing")
+  whyItMatters  String   @map("why_it_matters")
+  howToImprove  String   @map("how_to_improve")
+  potentialGain Int      @map("potential_gain")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  analysis RepositoryAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId, severity])
+  @@map("recommendations")
+}
+
+/// Multi-repository comparison session saved for reference or report generation.
+model RepositoryComparison {
+  id        String   @id @default(cuid())
+  title     String
+  userId    String?  @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items   RepositoryComparisonItem[]
+  reports Report[]
+
+  @@index([createdAt(sort: Desc)])
+  @@map("repository_comparisons")
+}
+
+/// Ordered join table associating repositories and exact analysis snapshots with a comparison.
+model RepositoryComparisonItem {
+  id           String @id @default(cuid())
+  comparisonId String @map("comparison_id")
+  repositoryId String @map("repository_id")
+  analysisId   String @map("analysis_id")
+  position     Int
+
+  comparison RepositoryComparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  repository Repository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  analysis   RepositoryAnalysis   @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@unique([comparisonId, repositoryId])
+  @@index([comparisonId, position])
+  @@map("repository_comparison_items")
+}
+
+/// Metadata and payload audit log for generated JSON and PDF reports.
+model Report {
+  id           String   @id @default(cuid())
+  reportType   String   @map("report_type")
+  format       String
+  title        String
+  repositoryId String?  @map("repository_id")
+  analysisId   String?  @map("analysis_id")
+  comparisonId String?  @map("comparison_id")
+  userId       String?  @map("user_id")
+  payloadJson  Json     @map("payload_json")
+  generatedAt  DateTime @default(now()) @map("generated_at")
+
+  repository Repository?           @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  analysis   RepositoryAnalysis?   @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  comparison RepositoryComparison? @relation(fields: [comparisonId], references: [id], onDelete: SetNull)
+  user       User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([generatedAt(sort: Desc)])
+  @@index([reportType])
+  @@map("reports")
+}
