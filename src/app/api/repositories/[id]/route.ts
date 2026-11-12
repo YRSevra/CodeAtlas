@@ -3,6 +3,7 @@ import { getRepositoryDetailsByIdOrSlug } from "@/lib/db/repositories";
 import { handleApiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {

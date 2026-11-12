@@ -406,7 +406,12 @@ export function AnalysisReportView({ data }: { data: AnalyzedRepositoryPayload }
           ) : metrics.contributors.length === 0 ? (
             <p className="mt-3 text-xs text-muted">No contributors reported for this repository.</p>
           ) : (
-            <div className="table-wrapper mt-3">
+            <div
+              className="table-wrapper mt-3"
+              tabIndex={0}
+              role="region"
+              aria-label="Top public contributors"
+            >
               <table className="data-table text-left text-xs">
                 <caption className="visually-hidden">Top public contributors</caption>
                 <thead>
@@ -468,6 +473,42 @@ export function AnalysisReportView({ data }: { data: AnalyzedRepositoryPayload }
             </ul>
           )}
         </div>
+      </section>
+
+      {/* Recent Releases */}
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h3 className="text-base font-semibold text-ink">Release &amp; Versioning History</h3>
+        {metrics.releases === null ? (
+          <p className="mt-2 text-xs text-muted">
+            Release information unavailable from GitHub API.
+          </p>
+        ) : metrics.releases.length === 0 ? (
+          <p className="mt-2 text-xs text-muted">
+            No published GitHub releases found for this repository.
+          </p>
+        ) : (
+          <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {metrics.releases.slice(0, 6).map((rel) => (
+              <div
+                key={rel.tagName}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-elevated/60 px-3 py-2.5 text-xs"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-mono font-semibold text-ink">{rel.tagName}</p>
+                  <p className="truncate text-[11px] text-muted">
+                    {rel.name && rel.name !== rel.tagName ? rel.name : "Tagged release"}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  {rel.isPrerelease ? <Badge variant="warning">Pre-release</Badge> : null}
+                  <p className="mt-0.5 text-[11px] text-muted">
+                    {formatRelativeDate(rel.publishedAt)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Data Quality Notes */}

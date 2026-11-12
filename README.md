@@ -145,17 +145,17 @@ npm run test:e2e      # Run Playwright end-to-end tests
 
 ## 13. Deployment Instructions
 
-1. Provision a managed PostgreSQL database and set `DATABASE_URL` in your deployment environment.
-2. Optionally set `GITHUB_TOKEN` as a server-only secret for higher GitHub API rate limits.
-3. Run database migrations during release:
+See [DEPLOYMENT.md](DEPLOYMENT.md) for full step-by-step **Vercel** deployment instructions, environment variable specifications, managed PostgreSQL setup, and serverless runtime considerations.
+
+Quick Vercel deployment overview:
+
+1. Provision a managed PostgreSQL database (for example Neon, Supabase, or Vercel Postgres) and configure `DATABASE_URL` (with `?sslmode=require`) in your Vercel project settings.
+2. Optionally set `GITHUB_TOKEN` as a server-only environment variable (unexposed to client bundles) to raise GitHub REST API limits from 60/hour to 5,000/hour.
+3. Run database migrations against your production database before serving traffic:
    ```bash
    npx prisma migrate deploy
    ```
-4. Build and start the application:
-   ```bash
-   npm run build
-   npm run start
-   ```
+4. Deploy to Vercel using the included [`vercel.json`](vercel.json) and `npm run build` (`prisma generate && next build`), then verify `/api/health`.
 
 ## 14. API Documentation
 
@@ -165,6 +165,7 @@ npm run test:e2e      # Run Playwright end-to-end tests
 - `GET /api/repositories/[id]` — Returns latest analysis and historical score snapshots for a repository ID or `owner/name`.
 - `GET /api/analytics` — Returns aggregated language distribution, score buckets, category averages, and health trends.
 - `POST /api/compare` — Body: `{ "urls": ["...", "..."], "title": "optional" }`. Compares 2–4 distinct repositories.
+- `GET /api/comparisons` — Lists saved repository comparison sessions from PostgreSQL.
 - `GET /api/reports` — Lists generated report audit logs from PostgreSQL.
 - `POST /api/reports/export` — Body: `{ "reportType": "analysis" | "health" | "comparison", "format": "json" | "pdf", "analysis"?: ..., "comparison"?: ... }`. Returns downloadable JSON or PDF bytes.
 - `POST /api/cache/clear` — Clears the in-memory GitHub API TTL cache.

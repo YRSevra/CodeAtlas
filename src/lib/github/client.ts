@@ -157,11 +157,28 @@ function extractTotalFromLinkHeader(linkHeader: string | null, itemsCount: numbe
 }
 
 async function githubGet<T>(path: string): Promise<FetchResult<T>> {
-  const response = await fetch(`${GITHUB_API_BASE}${path}`, {
-    method: "GET",
-    headers: getGitHubHeaders(),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${GITHUB_API_BASE}${path}`, {
+      method: "GET",
+      headers: getGitHubHeaders(),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new GitHubApiError(
+        "GitHub API request timed out. Please retry shortly.",
+        504,
+        "GITHUB_TIMEOUT"
+      );
+    }
+    throw new GitHubApiError(
+      "Unable to reach GitHub API. Check network connectivity and try again.",
+      503,
+      "GITHUB_NETWORK_ERROR"
+    );
+  }
 
   const rateLimit = parseRateLimit(response.headers);
   const linkHeader = response.headers.get("link");
@@ -203,6 +220,7 @@ export async function getGitHubRateLimitStatus(): Promise<RateLimitInfo> {
       method: "GET",
       headers: getGitHubHeaders(),
       cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
     });
 
     if (!response.ok) {

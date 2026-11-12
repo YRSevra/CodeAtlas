@@ -15,7 +15,7 @@ export const prisma: PrismaClient | null = isDatabaseConfigured()
     }))
   : null;
 
-if (process.env.NODE_ENV !== "production" && prisma) {
+if (prisma) {
   globalForPrisma.prisma = prisma;
 }
 

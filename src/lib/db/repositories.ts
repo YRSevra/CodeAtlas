@@ -719,3 +719,50 @@ export async function listSavedReports(client: PrismaClient | null = defaultPris
     return { databaseAvailable: false, reports: [] };
   }
 }
+
+export async function listSavedComparisons(client: PrismaClient | null = defaultPrisma): Promise<{
+  databaseAvailable: boolean;
+  comparisons: Array<{
+    id: string;
+    title: string;
+    createdAt: string;
+    repositories: Array<{ fullName: string; url: string; overallScore: number | null }>;
+  }>;
+}> {
+  if (!client) {
+    return { databaseAvailable: false, comparisons: [] };
+  }
+  try {
+    const rows = await client.repositoryComparison.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: {
+        items: {
+          orderBy: { position: "asc" },
+          include: {
+            repository: true,
+            analysis: {
+              include: { healthScore: true },
+            },
+          },
+        },
+      },
+    });
+    return {
+      databaseAvailable: true,
+      comparisons: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        createdAt: row.createdAt.toISOString(),
+        repositories: row.items.map((item) => ({
+          fullName: item.repository.fullName,
+          url: item.repository.url,
+          overallScore: item.analysis.healthScore?.overallScore ?? null,
+        })),
+      })),
+    };
+  } catch (error) {
+    logServerError("listSavedComparisons", error);
+    return { databaseAvailable: false, comparisons: [] };
+  }
+}

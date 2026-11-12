@@ -6,6 +6,8 @@ import { checkRateLimit, getClientIdentifier } from "@/lib/security/rate-limit";
 import { analyzeAndPersistRepository } from "@/lib/services/analyze-service";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
 const analyzeBodySchema = githubUrlInputSchema.extend({
   bypassCache: z.boolean().optional(),

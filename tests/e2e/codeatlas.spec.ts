@@ -113,7 +113,7 @@ test.describe("CodeAtlas E2E Flows", () => {
     await input.fill("https://example.com/not-github/repo");
     await page.getByRole("button", { name: "Analyze Repository" }).click();
 
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.locator("#repo-url-error")).toContainText(
       "Only github.com repository URLs are supported"
     );
   });

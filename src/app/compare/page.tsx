@@ -14,9 +14,16 @@ import {
 } from "lucide-react";
 import { PortfolioBarChart } from "@/components/charts/EngineeringCharts";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { saveSessionComparison } from "@/lib/client/session-store";
-import { formatNullableCount, getGradeTone } from "@/lib/format";
-import type { ComparisonPayload, ReportFormat } from "@/types/codeatlas";
+import { getSessionAnalyses, saveSessionComparison } from "@/lib/client/session-store";
+import { formatNullableCount, formatUtcTimestamp, getGradeTone } from "@/lib/format";
+import type { ComparisonPayload, HistoryListItem, ReportFormat } from "@/types/codeatlas";
+
+interface SavedComparisonItem {
+  id: string;
+  title: string;
+  createdAt: string;
+  repositories: Array<{ fullName: string; url: string; overallScore: number | null }>;
+}
 
 function CompareContent() {
   const searchParams = useSearchParams();
@@ -30,12 +37,71 @@ function CompareContent() {
   const [error, setError] = useState<string | null>(null);
   const [comparison, setComparison] = useState<ComparisonPayload | null>(null);
   const [exporting, setExporting] = useState<ReportFormat | null>(null);
+  const [quickCandidates, setQuickCandidates] = useState<Array<{ fullName: string; url: string }>>(
+    []
+  );
+  const [savedComparisons, setSavedComparisons] = useState<SavedComparisonItem[]>([]);
 
   useEffect(() => {
     if (prefilled) {
       setUrls((prev) => [prefilled, prev[1] || "https://github.com/prisma/prisma"]);
     }
   }, [prefilled]);
+
+  useEffect(() => {
+    const sessionRepos = getSessionAnalyses().map((item) => ({
+      fullName: item.repository.fullName,
+      url: item.repository.url,
+    }));
+
+    const loadSaved = async () => {
+      try {
+        const [histRes, compRes] = await Promise.all([
+          fetch("/api/history?limit=12", { cache: "no-store" }),
+          fetch("/api/comparisons", { cache: "no-store" }),
+        ]);
+
+        const merged = new Map<string, { fullName: string; url: string }>();
+        for (const r of sessionRepos) {
+          merged.set(r.fullName.toLowerCase(), r);
+        }
+
+        if (histRes.ok) {
+          const histJson = (await histRes.json()) as { items: HistoryListItem[] };
+          for (const item of histJson.items) {
+            merged.set(item.fullName.toLowerCase(), {
+              fullName: item.fullName,
+              url: item.url,
+            });
+          }
+        }
+        setQuickCandidates(Array.from(merged.values()).slice(0, 8));
+
+        if (compRes.ok) {
+          const compJson = (await compRes.json()) as { comparisons: SavedComparisonItem[] };
+          setSavedComparisons(compJson.comparisons);
+        }
+      } catch {
+        setQuickCandidates(sessionRepos.slice(0, 8));
+      }
+    };
+
+    void loadSaved();
+  }, []);
+
+  const handleQuickPick = (repoUrl: string) => {
+    setUrls((prev) => {
+      if (prev.includes(repoUrl)) return prev;
+      const emptyIdx = prev.findIndex((u) => !u.trim());
+      if (emptyIdx !== -1) {
+        return prev.map((u, i) => (i === emptyIdx ? repoUrl : u));
+      }
+      if (prev.length < 4) {
+        return [...prev, repoUrl];
+      }
+      return [...prev.slice(0, 3), repoUrl];
+    });
+  };
 
   const handleAddField = () => {
     if (urls.length < 4) {
@@ -187,6 +253,22 @@ function CompareContent() {
             )}
           </button>
         </div>
+
+        {quickCandidates.length > 0 ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-xs text-muted">
+            <span>Quick-add analyzed repos:</span>
+            {quickCandidates.map((cand) => (
+              <button
+                key={cand.fullName}
+                type="button"
+                onClick={() => handleQuickPick(cand.url)}
+                className="rounded-md border border-border bg-elevated px-2.5 py-1 font-mono text-xs text-ink hover:border-border-strong"
+              >
+                + {cand.fullName}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {error ? (
           <div
@@ -386,6 +468,39 @@ function CompareContent() {
           title="Select repositories to compare"
           description="Enter two or more public GitHub repository URLs above to compare their health scores, stars, activity, and engineering practices."
         />
+      ) : null}
+
+      {savedComparisons.length > 0 ? (
+        <section className="rounded-xl border border-border bg-surface p-5">
+          <h2 className="mb-3 text-base font-semibold text-ink">Saved Comparisons (PostgreSQL)</h2>
+          <div className="space-y-2.5">
+            {savedComparisons.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-elevated/60 px-4 py-3 text-xs"
+              >
+                <div>
+                  <p className="font-semibold text-ink">{item.title}</p>
+                  <p className="mt-0.5 text-muted">
+                    {item.repositories
+                      .map((r) => `${r.fullName} (${r.overallScore ?? "N/A"}/100)`)
+                      .join(" · ")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-muted">{formatUtcTimestamp(item.createdAt)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setUrls(item.repositories.map((r) => r.url))}
+                    className="rounded-md border border-border bg-surface px-2.5 py-1 font-medium text-accent hover:border-border-strong"
+                  >
+                    Load URLs
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
     </div>
   );

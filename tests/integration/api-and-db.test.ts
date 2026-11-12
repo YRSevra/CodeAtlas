@@ -6,6 +6,7 @@ import { POST as exportPost } from "@/app/api/reports/export/route";
 import {
   getAnalysisHistory,
   getAnalyticsSummary,
+  listSavedComparisons,
   persistRepositoryAnalysis,
 } from "@/lib/db/repositories";
 import { githubAnalysisCache } from "@/lib/github/cache";
@@ -309,5 +310,40 @@ describe("API Route & Database Integration", () => {
     expect(persistResult.repositoryId).toBe("repo_1");
     expect(mockTx.repository.upsert).toHaveBeenCalledTimes(1);
     expect(mockTx.repositoryAnalysis.create).toHaveBeenCalledTimes(1);
+
+    const offlineComparisons = await listSavedComparisons(null);
+    expect(offlineComparisons).toEqual({ databaseAvailable: false, comparisons: [] });
+  });
+
+  it("returns 503 GITHUB_NETWORK_ERROR when GitHub API is unreachable", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("ENOTFOUND api.github.com"));
+
+    const req = new NextRequest("http://localhost:3000/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "10.0.0.9" },
+      body: JSON.stringify({ url: "https://github.com/acme/network-down" }),
+    });
+
+    const res = await analyzePost(req);
+    expect(res.status).toBe(503);
+    const json = (await res.json()) as { code: string };
+    expect(json.code).toBe("GITHUB_NETWORK_ERROR");
+  });
+
+  it("returns 504 GITHUB_TIMEOUT when upstream GitHub request times out", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
+      Object.assign(new Error("The operation timed out."), { name: "TimeoutError" })
+    );
+
+    const req = new NextRequest("http://localhost:3000/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "10.0.0.10" },
+      body: JSON.stringify({ url: "https://github.com/acme/slow-upstream" }),
+    });
+
+    const res = await analyzePost(req);
+    expect(res.status).toBe(504);
+    const json = (await res.json()) as { code: string };
+    expect(json.code).toBe("GITHUB_TIMEOUT");
   });
 });

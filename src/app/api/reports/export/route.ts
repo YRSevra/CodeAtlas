@@ -7,6 +7,8 @@ import { checkRateLimit, getClientIdentifier } from "@/lib/security/rate-limit";
 import type { AnalyzedRepositoryPayload, ComparisonPayload } from "@/types/codeatlas";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
 const exportRequestSchema = z.object({
   reportType: z.enum(["analysis", "health", "comparison"]),

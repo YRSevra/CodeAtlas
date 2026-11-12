@@ -4,6 +4,7 @@ import { githubAnalysisCache } from "@/lib/github/cache";
 import { getGitHubRateLimitStatus } from "@/lib/github/client";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET() {
   const [database, rateLimit] = await Promise.all([

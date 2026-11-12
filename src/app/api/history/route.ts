@@ -3,6 +3,7 @@ import { getAnalysisHistory } from "@/lib/db/repositories";
 import { handleApiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   try {
