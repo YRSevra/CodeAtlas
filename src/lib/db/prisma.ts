@@ -1,4 +1,6 @@
+import { parseEnv } from "@neon/env";
 import { PrismaClient } from "@prisma/client";
+import neonConfig from "../../../neon";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -8,9 +10,24 @@ export function isDatabaseConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL?.trim());
 }
 
-export const prisma: PrismaClient | null = isDatabaseConfigured()
+function getValidatedDatabaseUrl(): string | null {
+  if (!isDatabaseConfigured()) {
+    return null;
+  }
+  const { postgres } = parseEnv(neonConfig, ["DATABASE_URL"]);
+  return postgres.databaseUrl;
+}
+
+const validatedDatabaseUrl = getValidatedDatabaseUrl();
+
+export const prisma: PrismaClient | null = validatedDatabaseUrl
   ? (globalForPrisma.prisma ??
     new PrismaClient({
+      datasources: {
+        db: {
+          url: validatedDatabaseUrl,
+        },
+      },
       log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
     }))
   : null;
@@ -46,7 +63,9 @@ export async function checkDatabaseConnection(): Promise<{
       configured: true,
       error: message.includes("ECONNREFUSED")
         ? "PostgreSQL connection refused. Ensure PostgreSQL is running (e.g., docker compose up -d)."
-        : "PostgreSQL is currently unreachable.",
+        : message.includes("53000") || message.toLowerCase().includes("exceeded the quota")
+          ? "Neon PostgreSQL quota exceeded or compute unavailable."
+          : "PostgreSQL is currently unreachable.",
     };
   }
 }
